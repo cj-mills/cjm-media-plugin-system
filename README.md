@@ -14,9 +14,10 @@ pip install cjm_media_plugin_system
     nbs/
     ├── analysis_interface.ipynb   # Domain-specific plugin interface for media analysis (read-only / signal extraction)
     ├── core.ipynb                 # DTOs for media analysis and processing with FileBackedDTO support for zero-copy transfer
-    └── processing_interface.ipynb # Domain-specific plugin interface for media processing (write / file manipulation)
+    ├── processing_interface.ipynb # Domain-specific plugin interface for media processing (write / file manipulation)
+    └── storage.ipynb              # Standardized SQLite storage for media analysis and processing results with content hashing
 
-Total: 3 notebooks
+Total: 4 notebooks
 
 ## Module Dependencies
 
@@ -25,6 +26,7 @@ graph LR
     analysis_interface[analysis_interface<br/>Media Analysis Plugin Interface]
     core[core<br/>Core Data Structures]
     processing_interface[processing_interface<br/>Media Processing Plugin Interface]
+    storage[storage<br/>Media Storage]
 
     analysis_interface --> core
     processing_interface --> core
@@ -196,4 +198,148 @@ class MediaProcessingPlugin(PluginInterface):
             output_path: Optional[str] = None   # Custom output path (auto-generated if None)
         ) -> str:  # Path to extracted segment file
         "Extract a temporal segment from a media file."
+```
+
+### Media Storage (`storage.ipynb`)
+
+> Standardized SQLite storage for media analysis and processing results
+> with content hashing
+
+#### Import
+
+``` python
+from cjm_media_plugin_system.storage import (
+    MediaAnalysisRow,
+    MediaAnalysisStorage,
+    MediaProcessingRow,
+    MediaProcessingStorage
+)
+```
+
+#### Classes
+
+``` python
+@dataclass
+class MediaAnalysisRow:
+    "A single row from the analysis_jobs table."
+    
+    file_path: str  # Path to the analyzed media file
+    file_hash: str  # Hash of source file in "algo:hexdigest" format
+    config_hash: str  # Hash of the analysis config used
+    ranges: Optional[List[Dict[str, Any]]]  # Detected temporal segments
+    metadata: Optional[Dict[str, Any]]  # Analysis metadata
+    created_at: Optional[float]  # Unix timestamp
+```
+
+``` python
+class MediaAnalysisStorage:
+    def __init__(
+        self,
+        db_path: str  # Absolute path to the SQLite database file
+    )
+    "Standardized SQLite storage for media analysis results."
+    
+    def __init__(
+            self,
+            db_path: str  # Absolute path to the SQLite database file
+        )
+        "Initialize storage and create table if needed."
+    
+    def save(
+            self,
+            file_path: str,     # Path to the analyzed media file
+            file_hash: str,     # Hash of source file in "algo:hexdigest" format
+            config_hash: str,   # Hash of the analysis config
+            ranges: Optional[List[Dict[str, Any]]] = None,  # Detected temporal segments
+            metadata: Optional[Dict[str, Any]] = None        # Analysis metadata
+        ) -> None
+        "Save or replace an analysis result (upsert by file_path + config_hash)."
+    
+    def get_cached(
+            self,
+            file_path: str,   # Path to the media file
+            config_hash: str  # Config hash to match
+        ) -> Optional[MediaAnalysisRow]:  # Cached row or None
+        "Retrieve a cached analysis result by file path and config hash."
+    
+    def list_jobs(
+            self,
+            limit: int = 100  # Maximum number of rows to return
+        ) -> List[MediaAnalysisRow]:  # List of analysis rows
+        "List analysis jobs ordered by creation time (newest first)."
+    
+    def verify_file(
+            self,
+            file_path: str,   # Path to the media file
+            config_hash: str  # Config hash to look up
+        ) -> Optional[bool]:  # True if file matches, False if changed, None if not found
+        "Verify the source media file still matches its stored hash."
+```
+
+``` python
+@dataclass
+class MediaProcessingRow:
+    "A single row from the processing_jobs table."
+    
+    job_id: str  # Unique job identifier
+    action: str  # Operation performed: 'convert', 'extract_segment', etc.
+    input_path: str  # Path to the source media file
+    input_hash: str  # Hash of source file in "algo:hexdigest" format
+    output_path: str  # Path to the produced output file
+    output_hash: str  # Hash of output file in "algo:hexdigest" format
+    parameters: Optional[Dict[str, Any]]  # Action-specific parameters
+    metadata: Optional[Dict[str, Any]]  # Processing metadata
+    created_at: Optional[float]  # Unix timestamp
+```
+
+``` python
+class MediaProcessingStorage:
+    def __init__(
+        self,
+        db_path: str  # Absolute path to the SQLite database file
+    )
+    "Standardized SQLite storage for media processing results."
+    
+    def __init__(
+            self,
+            db_path: str  # Absolute path to the SQLite database file
+        )
+        "Initialize storage and create table if needed."
+    
+    def save(
+            self,
+            job_id: str,        # Unique job identifier
+            action: str,        # Operation performed: 'convert', 'extract_segment', etc.
+            input_path: str,    # Path to the source media file
+            input_hash: str,    # Hash of source file in "algo:hexdigest" format
+            output_path: str,   # Path to the produced output file
+            output_hash: str,   # Hash of output file in "algo:hexdigest" format
+            parameters: Optional[Dict[str, Any]] = None,  # Action-specific parameters
+            metadata: Optional[Dict[str, Any]] = None       # Processing metadata
+        ) -> None
+        "Save a media processing result to the database."
+    
+    def get_by_job_id(
+            self,
+            job_id: str  # Job identifier to look up
+        ) -> Optional[MediaProcessingRow]:  # Row or None if not found
+        "Retrieve a processing result by job ID."
+    
+    def list_jobs(
+            self,
+            limit: int = 100  # Maximum number of rows to return
+        ) -> List[MediaProcessingRow]:  # List of processing rows
+        "List processing jobs ordered by creation time (newest first)."
+    
+    def verify_input(
+            self,
+            job_id: str  # Job identifier to verify
+        ) -> Optional[bool]:  # True if input matches, False if changed, None if not found
+        "Verify the source media file still matches its stored hash."
+    
+    def verify_output(
+            self,
+            job_id: str  # Job identifier to verify
+        ) -> Optional[bool]:  # True if output matches, False if changed, None if not found
+        "Verify the output media file still matches its stored hash."
 ```
