@@ -1,0 +1,222 @@
+[
+  {
+    "objectID": "analysis_interface.html",
+    "href": "analysis_interface.html",
+    "title": "Media Analysis Plugin Interface",
+    "section": "",
+    "text": "source",
+    "crumbs": [
+      "Media Analysis Plugin Interface"
+    ]
+  },
+  {
+    "objectID": "analysis_interface.html#how-it-works",
+    "href": "analysis_interface.html#how-it-works",
+    "title": "Media Analysis Plugin Interface",
+    "section": "How It Works",
+    "text": "How It Works\nHost Process                              Worker Process (Isolated Env)\n┌─────────────────────┐                  ┌─────────────────────────────┐\n│                     │                  │                             │\n│ plugin.execute(     │   HTTP/JSON      │  MediaAnalysisPlugin        │\n│   media_path=       │ ─────────────────▶    .execute(                │\n│   \"/path/video.mp4\" │                  │       media_path=\"...\"      │\n│ )                   │                  │    )                        │\n│                     │                  │                             │\n│                     │                  │  # Returns TimeRanges       │\n│ MediaAnalysisResult │  ◀───────────────│  # e.g., speech segments    │\n│   .ranges           │   (JSON or       │  #       scene boundaries   │\n│   .metadata         │    FileBackedDTO)│  #       beat timestamps    │\n│                     │                  │                             │\n└─────────────────────┘                  └─────────────────────────────┘\nAnalysis plugins: - Receive a file path to the media to analyze - Return MediaAnalysisResult containing detected TimeRange segments - Are read-only (do not modify the input file)",
+    "crumbs": [
+      "Media Analysis Plugin Interface"
+    ]
+  },
+  {
+    "objectID": "analysis_interface.html#example-implementation",
+    "href": "analysis_interface.html#example-implementation",
+    "title": "Media Analysis Plugin Interface",
+    "section": "Example Implementation",
+    "text": "Example Implementation\nA minimal analysis plugin that demonstrates the interface:\n\nfrom typing import Any, Dict, List, Optional\nfrom cjm_media_plugin_system.core import TimeRange\n\nclass ExampleVADPlugin(MediaAnalysisPlugin):\n    \"\"\"Example VAD (Voice Activity Detection) plugin implementation.\"\"\"\n    \n    def __init__(self):\n        self._config: Dict[str, Any] = {}\n        self._model = None\n\n    @property\n    def name(self) -&gt; str:\n        return \"example-vad\"\n    \n    @property\n    def version(self) -&gt; str:\n        return \"1.0.0\"\n\n    def initialize(self, config: Optional[Dict[str, Any]] = None) -&gt; None:\n        \"\"\"Initialize with configuration.\"\"\"\n        self._config = config or {\"threshold\": 0.5}\n        self._model = f\"MockVAD-threshold-{self._config.get('threshold')}\"\n\n    def execute(\n        self,\n        media_path: Union[str, Path],\n        **kwargs\n    ) -&gt; MediaAnalysisResult:\n        \"\"\"Detect voice activity segments in the audio.\"\"\"\n        # Mock VAD detection results\n        ranges = [\n            TimeRange(start=0.0, end=2.5, label=\"speech\", confidence=0.95),\n            TimeRange(start=2.5, end=3.0, label=\"silence\", confidence=0.99),\n            TimeRange(start=3.0, end=7.5, label=\"speech\", confidence=0.92),\n        ]\n        \n        return MediaAnalysisResult(\n            ranges=ranges,\n            metadata={\n                \"source\": str(media_path),\n                \"model\": self._config.get(\"threshold\"),\n                \"total_speech\": 7.0,\n                \"total_silence\": 0.5\n            }\n        )\n\n    def get_config_schema(self) -&gt; Dict[str, Any]:\n        \"\"\"Return JSON Schema for configuration.\"\"\"\n        return {\n            \"type\": \"object\",\n            \"properties\": {\n                \"threshold\": {\n                    \"type\": \"number\",\n                    \"minimum\": 0.0,\n                    \"maximum\": 1.0,\n                    \"default\": 0.5,\n                    \"description\": \"Voice activity detection threshold\"\n                }\n            }\n        }\n\n    def get_current_config(self) -&gt; Dict[str, Any]:\n        \"\"\"Return current configuration.\"\"\"\n        return self._config\n\n    def cleanup(self) -&gt; None:\n        \"\"\"Clean up resources.\"\"\"\n        self._model = None\n\n\n# Test the example plugin\nplugin = ExampleVADPlugin()\nplugin.initialize({\"threshold\": 0.6})\n\nprint(f\"Plugin: {plugin.name} v{plugin.version}\")\nprint(f\"Config schema: {plugin.get_config_schema()}\")\nprint(f\"Current config: {plugin.get_current_config()}\")\n\n# Test execution\nresult = plugin.execute(\"/path/to/audio.wav\")\nprint(f\"\\nDetected {len(result.ranges)} segments:\")\nfor r in result.ranges:\n    print(f\"  {r.label}: {r.start}s - {r.end}s (conf: {r.confidence})\")\nprint(f\"Metadata: {result.metadata}\")\n\n# Cleanup\nplugin.cleanup()\n\nPlugin: example-vad v1.0.0\nConfig schema: {'type': 'object', 'properties': {'threshold': {'type': 'number', 'minimum': 0.0, 'maximum': 1.0, 'default': 0.5, 'description': 'Voice activity detection threshold'}}}\nCurrent config: {'threshold': 0.6}\n\nDetected 3 segments:\n  speech: 0.0s - 2.5s (conf: 0.95)\n  silence: 2.5s - 3.0s (conf: 0.99)\n  speech: 3.0s - 7.5s (conf: 0.92)\nMetadata: {'source': '/path/to/audio.wav', 'model': 0.6, 'total_speech': 7.0, 'total_silence': 0.5}",
+    "crumbs": [
+      "Media Analysis Plugin Interface"
+    ]
+  },
+  {
+    "objectID": "storage.html",
+    "href": "storage.html",
+    "title": "Media Storage",
+    "section": "",
+    "text": "A dataclass representing a single row in the standardized analysis_jobs table.\n\nsource\n\n\n\ndef MediaAnalysisRow(\n    file_path:str, file_hash:str, config_hash:str, ranges:Optional=None, metadata:Optional=None,\n    created_at:Optional=None\n)-&gt;None:\n\nA single row from the analysis_jobs table.\n\n# Test MediaAnalysisRow creation\nrow = MediaAnalysisRow(\n    file_path=\"/tmp/test.mp3\",\n    file_hash=\"sha256:\" + \"a\" * 64,\n    config_hash=\"sha256:\" + \"b\" * 64,\n    ranges=[{\"start\": 0.0, \"end\": 2.5, \"label\": \"speech\"}],\n    metadata={\"segment_count\": 1}\n)\n\nprint(f\"Row: file_path={row.file_path}\")\nprint(f\"File hash: {row.file_hash[:20]}...\")\nprint(f\"Config hash: {row.config_hash[:20]}...\")\n\nRow: file_path=/tmp/test.mp3\nFile hash: sha256:aaaaaaaaaaaaa...\nConfig hash: sha256:bbbbbbbbbbbbb...",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "storage.html#mediaanalysisrow",
+    "href": "storage.html#mediaanalysisrow",
+    "title": "Media Storage",
+    "section": "",
+    "text": "A dataclass representing a single row in the standardized analysis_jobs table.\n\nsource\n\n\n\ndef MediaAnalysisRow(\n    file_path:str, file_hash:str, config_hash:str, ranges:Optional=None, metadata:Optional=None,\n    created_at:Optional=None\n)-&gt;None:\n\nA single row from the analysis_jobs table.\n\n# Test MediaAnalysisRow creation\nrow = MediaAnalysisRow(\n    file_path=\"/tmp/test.mp3\",\n    file_hash=\"sha256:\" + \"a\" * 64,\n    config_hash=\"sha256:\" + \"b\" * 64,\n    ranges=[{\"start\": 0.0, \"end\": 2.5, \"label\": \"speech\"}],\n    metadata={\"segment_count\": 1}\n)\n\nprint(f\"Row: file_path={row.file_path}\")\nprint(f\"File hash: {row.file_hash[:20]}...\")\nprint(f\"Config hash: {row.config_hash[:20]}...\")\n\nRow: file_path=/tmp/test.mp3\nFile hash: sha256:aaaaaaaaaaaaa...\nConfig hash: sha256:bbbbbbbbbbbbb...",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "storage.html#mediaanalysisstorage",
+    "href": "storage.html#mediaanalysisstorage",
+    "title": "Media Storage",
+    "section": "MediaAnalysisStorage",
+    "text": "MediaAnalysisStorage\nStandardized SQLite storage that all media analysis plugins should use. Defines the canonical schema for the analysis_jobs table with file hashing for traceability and config-based caching.\nSchema:\nCREATE TABLE IF NOT EXISTS analysis_jobs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    file_path TEXT NOT NULL,\n    file_hash TEXT NOT NULL,\n    config_hash TEXT NOT NULL,\n    ranges JSON,\n    metadata JSON,\n    created_at REAL NOT NULL,\n    UNIQUE(file_path, config_hash)\n);\nThe UNIQUE(file_path, config_hash) constraint enables result caching — re-running the same file with the same config replaces the previous result. Different configs for the same file are stored separately.\n\nsource\n\nMediaAnalysisStorage\n\ndef MediaAnalysisStorage(\n    db_path:str, # Absolute path to the SQLite database file\n):\n\nStandardized SQLite storage for media analysis results.",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "storage.html#testing",
+    "href": "storage.html#testing",
+    "title": "Media Storage",
+    "section": "Testing",
+    "text": "Testing\n\nimport tempfile\nimport os\n\n# Create storage with temp database\ntmp_db = tempfile.NamedTemporaryFile(suffix=\".db\", delete=False)\nstorage = MediaAnalysisStorage(tmp_db.name)\n\nprint(f\"Storage initialized at: {tmp_db.name}\")\n\nStorage initialized at: /tmp/tmpbdwbjwgf.db\n\n\n\n# Save an analysis result\nstorage.save(\n    file_path=\"/tmp/test_audio.mp3\",\n    file_hash=\"sha256:\" + \"a\" * 64,\n    config_hash=\"sha256:\" + \"c\" * 64,\n    ranges=[\n        {\"start\": 0.0, \"end\": 2.5, \"label\": \"speech\", \"confidence\": 0.98},\n        {\"start\": 4.0, \"end\": 8.5, \"label\": \"speech\", \"confidence\": 0.95}\n    ],\n    metadata={\"segment_count\": 2, \"total_speech\": 7.0}\n)\n\nprint(\"Saved analysis result\")\n\nSaved analysis result\n\n\n\n# Retrieve cached result\ncached = storage.get_cached(\"/tmp/test_audio.mp3\", \"sha256:\" + \"c\" * 64)\nassert cached is not None\nassert cached.file_path == \"/tmp/test_audio.mp3\"\nassert len(cached.ranges) == 2\nassert cached.metadata[\"segment_count\"] == 2\nassert cached.created_at is not None\n\nprint(f\"Cached: {cached.file_path}\")\nprint(f\"Ranges: {len(cached.ranges)} segments\")\nprint(f\"File hash: {cached.file_hash[:20]}...\")\n\n# Missing config returns None\nmissing = storage.get_cached(\"/tmp/test_audio.mp3\", \"sha256:\" + \"d\" * 64)\nassert missing is None\nprint(\"Cache miss for different config: OK\")\n\nCached: /tmp/test_audio.mp3\nRanges: 2 segments\nFile hash: sha256:aaaaaaaaaaaaa...\nCache miss for different config: OK\n\n\n\n# Save with same file+config replaces (upsert)\nstorage.save(\n    file_path=\"/tmp/test_audio.mp3\",\n    file_hash=\"sha256:\" + \"a\" * 64,\n    config_hash=\"sha256:\" + \"c\" * 64,\n    ranges=[{\"start\": 0.0, \"end\": 3.0, \"label\": \"speech\"}],\n    metadata={\"segment_count\": 1, \"total_speech\": 3.0}\n)\n\nupdated = storage.get_cached(\"/tmp/test_audio.mp3\", \"sha256:\" + \"c\" * 64)\nassert len(updated.ranges) == 1  # Updated to 1 range\nassert updated.metadata[\"segment_count\"] == 1\n\n# Only 1 row total (replaced, not appended)\nall_jobs = storage.list_jobs()\nassert len(all_jobs) == 1\n\nprint(\"Upsert replaced existing row: OK\")\n\nUpsert replaced existing row: OK\n\n\n\n# Different config for same file creates separate row\nstorage.save(\n    file_path=\"/tmp/test_audio.mp3\",\n    file_hash=\"sha256:\" + \"a\" * 64,\n    config_hash=\"sha256:\" + \"e\" * 64,  # Different config\n    ranges=[{\"start\": 0.5, \"end\": 2.0, \"label\": \"speech\"}],\n    metadata={\"segment_count\": 1}\n)\n\nall_jobs = storage.list_jobs()\nassert len(all_jobs) == 2\n\nprint(f\"Two configs for same file: {len(all_jobs)} rows\")\n\nTwo configs for same file: 2 rows\n\n\n\n# Cleanup\nos.unlink(tmp_db.name)\nprint(\"Cleanup complete\")\n\nCleanup complete",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "storage.html#mediaprocessingrow",
+    "href": "storage.html#mediaprocessingrow",
+    "title": "Media Storage",
+    "section": "MediaProcessingRow",
+    "text": "MediaProcessingRow\nA dataclass representing a single row in the standardized processing_jobs table. Tracks input/output file pairs with hashes for full traceability of media transformations.\n\nsource\n\nMediaProcessingRow\n\ndef MediaProcessingRow(\n    job_id:str, action:str, input_path:str, input_hash:str, output_path:str, output_hash:str,\n    parameters:Optional=None, metadata:Optional=None, created_at:Optional=None\n)-&gt;None:\n\nA single row from the processing_jobs table.\n\n# Test MediaProcessingRow creation\nproc_row = MediaProcessingRow(\n    job_id=\"job_conv_001\",\n    action=\"convert\",\n    input_path=\"/tmp/source.mkv\",\n    input_hash=\"sha256:\" + \"a\" * 64,\n    output_path=\"/tmp/output.mp4\",\n    output_hash=\"sha256:\" + \"b\" * 64,\n    parameters={\"output_format\": \"mp4\", \"codec\": \"h264\"}\n)\n\nprint(f\"Row: job_id={proc_row.job_id}, action={proc_row.action}\")\nprint(f\"Input: {proc_row.input_path} -&gt; Output: {proc_row.output_path}\")\n\nRow: job_id=job_conv_001, action=convert\nInput: /tmp/source.mkv -&gt; Output: /tmp/output.mp4",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "storage.html#mediaprocessingstorage",
+    "href": "storage.html#mediaprocessingstorage",
+    "title": "Media Storage",
+    "section": "MediaProcessingStorage",
+    "text": "MediaProcessingStorage\nStandardized SQLite storage that all media processing plugins should use. Defines the canonical schema for the processing_jobs table, tracking input/output file pairs with content hashes.\nSchema:\nCREATE TABLE IF NOT EXISTS processing_jobs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    job_id TEXT UNIQUE NOT NULL,\n    action TEXT NOT NULL,\n    input_path TEXT NOT NULL,\n    input_hash TEXT NOT NULL,\n    output_path TEXT NOT NULL,\n    output_hash TEXT NOT NULL,\n    parameters JSON,\n    metadata JSON,\n    created_at REAL NOT NULL\n);\nBoth input_hash and output_hash use the self-describing \"algo:hexdigest\" format, enabling verification of both source integrity (“is this the same file we converted?”) and output integrity (“has the output been modified since conversion?”).\n\nsource\n\nMediaProcessingStorage\n\ndef MediaProcessingStorage(\n    db_path:str, # Absolute path to the SQLite database file\n):\n\nStandardized SQLite storage for media processing results.\n\n\nTesting MediaProcessingStorage\n\n# Create processing storage with temp database\ntmp_db2 = tempfile.NamedTemporaryFile(suffix=\".db\", delete=False)\nproc_storage = MediaProcessingStorage(tmp_db2.name)\n\nprint(f\"Processing storage initialized at: {tmp_db2.name}\")\n\nProcessing storage initialized at: /tmp/tmp6cy8gfmq.db\n\n\n\n# Save a conversion job\nproc_storage.save(\n    job_id=\"job_conv_001\",\n    action=\"convert\",\n    input_path=\"/tmp/source.mkv\",\n    input_hash=\"sha256:\" + \"a\" * 64,\n    output_path=\"/tmp/output.mp4\",\n    output_hash=\"sha256:\" + \"b\" * 64,\n    parameters={\"output_format\": \"mp4\", \"codec\": \"h264\"},\n    metadata={\"duration\": 120.5}\n)\n\nprint(\"Saved conversion job\")\n\nSaved conversion job\n\n\n\n# Retrieve by job ID\nrow = proc_storage.get_by_job_id(\"job_conv_001\")\nassert row is not None\nassert row.job_id == \"job_conv_001\"\nassert row.action == \"convert\"\nassert row.input_path == \"/tmp/source.mkv\"\nassert row.output_path == \"/tmp/output.mp4\"\nassert row.parameters[\"output_format\"] == \"mp4\"\nassert row.created_at is not None\n\nprint(f\"Retrieved: {row.job_id} ({row.action})\")\nprint(f\"Input: {row.input_path} ({row.input_hash[:20]}...)\")\nprint(f\"Output: {row.output_path} ({row.output_hash[:20]}...)\")\n\n# Missing job returns None\nassert proc_storage.get_by_job_id(\"nonexistent\") is None\nprint(\"get_by_job_id returns None for missing job: OK\")\n\nRetrieved: job_conv_001 (convert)\nInput: /tmp/source.mkv (sha256:aaaaaaaaaaaaa...)\nOutput: /tmp/output.mp4 (sha256:bbbbbbbbbbbbb...)\nget_by_job_id returns None for missing job: OK\n\n\n\n# Save an extract_segment job and test list_jobs\nproc_storage.save(\n    job_id=\"job_ext_001\",\n    action=\"extract_segment\",\n    input_path=\"/tmp/source.mkv\",\n    input_hash=\"sha256:\" + \"a\" * 64,\n    output_path=\"/tmp/segment_10-20.wav\",\n    output_hash=\"sha256:\" + \"c\" * 64,\n    parameters={\"start\": 10.0, \"end\": 20.0}\n)\n\njobs = proc_storage.list_jobs()\nassert len(jobs) == 2\nassert jobs[0].job_id == \"job_ext_001\"  # Newest first\nassert jobs[0].action == \"extract_segment\"\n\nprint(f\"list_jobs returned {len(jobs)} rows: {[(j.job_id, j.action) for j in jobs]}\")\n\nlist_jobs returned 2 rows: [('job_ext_001', 'extract_segment'), ('job_conv_001', 'convert')]\n\n\n\n# Cleanup\nos.unlink(tmp_db2.name)\nprint(\"Processing storage cleanup complete\")\n\nProcessing storage cleanup complete",
+    "crumbs": [
+      "Media Storage"
+    ]
+  },
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "Core Data Structures",
+    "section": "",
+    "text": "Represents a specific temporal segment within a media file. Used by analysis plugins to mark regions of interest (VAD segments, scene boundaries, etc.).\n\nsource\n\n\n\ndef TimeRange(\n    start:float, end:float, label:str='segment', confidence:Optional=None, payload:Dict=&lt;factory&gt;\n)-&gt;None:\n\nRepresents a temporal segment within a media file.\n\n# Test TimeRange creation\nsegment = TimeRange(\n    start=1.5,\n    end=3.2,\n    label=\"speech\",\n    confidence=0.95,\n    payload={\"speaker_id\": \"speaker_01\"}\n)\n\nprint(f\"TimeRange: {segment.start}s - {segment.end}s\")\nprint(f\"Label: {segment.label}\")\nprint(f\"Confidence: {segment.confidence}\")\nprint(f\"Payload: {segment.payload}\")\nprint(f\"\\nAs dict: {segment.to_dict()}\")\n\nTimeRange: 1.5s - 3.2s\nLabel: speech\nConfidence: 0.95\nPayload: {'speaker_id': 'speaker_01'}\n\nAs dict: {'start': 1.5, 'end': 3.2, 'label': 'speech', 'confidence': 0.95, 'payload': {'speaker_id': 'speaker_01'}}",
+    "crumbs": [
+      "Core Data Structures"
+    ]
+  },
+  {
+    "objectID": "core.html#timerange",
+    "href": "core.html#timerange",
+    "title": "Core Data Structures",
+    "section": "",
+    "text": "Represents a specific temporal segment within a media file. Used by analysis plugins to mark regions of interest (VAD segments, scene boundaries, etc.).\n\nsource\n\n\n\ndef TimeRange(\n    start:float, end:float, label:str='segment', confidence:Optional=None, payload:Dict=&lt;factory&gt;\n)-&gt;None:\n\nRepresents a temporal segment within a media file.\n\n# Test TimeRange creation\nsegment = TimeRange(\n    start=1.5,\n    end=3.2,\n    label=\"speech\",\n    confidence=0.95,\n    payload={\"speaker_id\": \"speaker_01\"}\n)\n\nprint(f\"TimeRange: {segment.start}s - {segment.end}s\")\nprint(f\"Label: {segment.label}\")\nprint(f\"Confidence: {segment.confidence}\")\nprint(f\"Payload: {segment.payload}\")\nprint(f\"\\nAs dict: {segment.to_dict()}\")\n\nTimeRange: 1.5s - 3.2s\nLabel: speech\nConfidence: 0.95\nPayload: {'speaker_id': 'speaker_01'}\n\nAs dict: {'start': 1.5, 'end': 3.2, 'label': 'speech', 'confidence': 0.95, 'payload': {'speaker_id': 'speaker_01'}}",
+    "crumbs": [
+      "Core Data Structures"
+    ]
+  },
+  {
+    "objectID": "core.html#mediametadata",
+    "href": "core.html#mediametadata",
+    "title": "Core Data Structures",
+    "section": "MediaMetadata",
+    "text": "MediaMetadata\nStandard container for basic media file information (duration, codec, streams, etc.).\n\nsource\n\nMediaMetadata\n\ndef MediaMetadata(\n    path:str, duration:float, format:str, size_bytes:int, video_streams:List=&lt;factory&gt;, audio_streams:List=&lt;factory&gt;\n)-&gt;None:\n\nContainer for media file metadata.\n\n# Test MediaMetadata creation\nmetadata = MediaMetadata(\n    path=\"/path/to/video.mp4\",\n    duration=120.5,\n    format=\"mp4\",\n    size_bytes=15_000_000,\n    video_streams=[{\"codec\": \"h264\", \"width\": 1920, \"height\": 1080, \"fps\": 30}],\n    audio_streams=[{\"codec\": \"aac\", \"sample_rate\": 48000, \"channels\": 2}]\n)\n\nprint(f\"File: {metadata.path}\")\nprint(f\"Duration: {metadata.duration}s\")\nprint(f\"Format: {metadata.format}\")\nprint(f\"Size: {metadata.size_bytes / 1_000_000:.2f} MB\")\nprint(f\"Video streams: {metadata.video_streams}\")\nprint(f\"Audio streams: {metadata.audio_streams}\")\n\nFile: /path/to/video.mp4\nDuration: 120.5s\nFormat: mp4\nSize: 15.00 MB\nVideo streams: [{'codec': 'h264', 'width': 1920, 'height': 1080, 'fps': 30}]\nAudio streams: [{'codec': 'aac', 'sample_rate': 48000, 'channels': 2}]",
+    "crumbs": [
+      "Core Data Structures"
+    ]
+  },
+  {
+    "objectID": "core.html#mediaanalysisresult",
+    "href": "core.html#mediaanalysisresult",
+    "title": "Core Data Structures",
+    "section": "MediaAnalysisResult",
+    "text": "MediaAnalysisResult\nStandard output for media analysis plugins. Implements FileBackedDTO for zero-copy transfer between Host and Worker processes.\n\nsource\n\nMediaAnalysisResult\n\ndef MediaAnalysisResult(\n    ranges:List, metadata:Dict=&lt;factory&gt;\n)-&gt;None:\n\nStandard output for media analysis plugins.\n\n# Test MediaAnalysisResult creation\nresult = MediaAnalysisResult(\n    ranges=[\n        TimeRange(start=0.0, end=2.5, label=\"speech\", confidence=0.98),\n        TimeRange(start=2.5, end=4.0, label=\"silence\", confidence=0.99),\n        TimeRange(start=4.0, end=8.5, label=\"speech\", confidence=0.95),\n    ],\n    metadata={\"total_speech\": 7.0, \"total_silence\": 1.5, \"model\": \"silero-vad\"}\n)\n\nprint(f\"Number of segments: {len(result.ranges)}\")\nfor r in result.ranges:\n    print(f\"  {r.label}: {r.start}s - {r.end}s (conf: {r.confidence})\")\nprint(f\"Metadata: {result.metadata}\")\n\n# Test FileBackedDTO protocol\nprint(f\"Implements FileBackedDTO: {isinstance(result, FileBackedDTO)}\")\n\n# Test to_temp_file (this is what the Proxy calls)\ntemp_path = result.to_temp_file()\nprint(f\"Saved to temp file: {temp_path}\")\n\n# Verify the file exists\nimport os\nprint(f\"File exists: {os.path.exists(temp_path)}\")\nprint(f\"File size: {os.path.getsize(temp_path)} bytes\")\n\n# Test from_file (round-trip)\nloaded = MediaAnalysisResult.from_file(temp_path)\nprint(f\"\\nLoaded {len(loaded.ranges)} ranges from file\")\nprint(f\"Loaded metadata: {loaded.metadata}\")\n\n# Clean up\nos.unlink(temp_path)\n\nNumber of segments: 3\n  speech: 0.0s - 2.5s (conf: 0.98)\n  silence: 2.5s - 4.0s (conf: 0.99)\n  speech: 4.0s - 8.5s (conf: 0.95)\nMetadata: {'total_speech': 7.0, 'total_silence': 1.5, 'model': 'silero-vad'}\nImplements FileBackedDTO: True\nSaved to temp file: /tmp/tmphpqoebbs.json\nFile exists: True\nFile size: 339 bytes\n\nLoaded 3 ranges from file\nLoaded metadata: {'total_speech': 7.0, 'total_silence': 1.5, 'model': 'silero-vad'}",
+    "crumbs": [
+      "Core Data Structures"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "cjm-media-plugin-system",
+    "section": "",
+    "text": "pip install cjm_media_plugin_system",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "index.html#install",
+    "href": "index.html#install",
+    "title": "cjm-media-plugin-system",
+    "section": "",
+    "text": "pip install cjm_media_plugin_system",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "index.html#project-structure",
+    "href": "index.html#project-structure",
+    "title": "cjm-media-plugin-system",
+    "section": "Project Structure",
+    "text": "Project Structure\nnbs/\n├── analysis_interface.ipynb   # Domain-specific plugin interface for media analysis (read-only / signal extraction)\n├── core.ipynb                 # DTOs for media analysis and processing with FileBackedDTO support for zero-copy transfer\n├── processing_interface.ipynb # Domain-specific plugin interface for media processing (write / file manipulation)\n└── storage.ipynb              # Standardized SQLite storage for media analysis and processing results with content hashing\nTotal: 4 notebooks",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "index.html#module-dependencies",
+    "href": "index.html#module-dependencies",
+    "title": "cjm-media-plugin-system",
+    "section": "Module Dependencies",
+    "text": "Module Dependencies\ngraph LR\n    analysis_interface[analysis_interface&lt;br/&gt;Media Analysis Plugin Interface]\n    core[core&lt;br/&gt;Core Data Structures]\n    processing_interface[processing_interface&lt;br/&gt;Media Processing Plugin Interface]\n    storage[storage&lt;br/&gt;Media Storage]\n\n    analysis_interface --&gt; core\n    processing_interface --&gt; core\n2 cross-module dependencies detected",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "index.html#cli-reference",
+    "href": "index.html#cli-reference",
+    "title": "cjm-media-plugin-system",
+    "section": "CLI Reference",
+    "text": "CLI Reference\nNo CLI commands found in this project.",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "index.html#module-overview",
+    "href": "index.html#module-overview",
+    "title": "cjm-media-plugin-system",
+    "section": "Module Overview",
+    "text": "Module Overview\nDetailed documentation for each module in the project:\n\nMedia Analysis Plugin Interface (analysis_interface.ipynb)\n\nDomain-specific plugin interface for media analysis (read-only / signal extraction)\n\n\nImport\nfrom cjm_media_plugin_system.analysis_interface import (\n    MediaAnalysisPlugin\n)\n\n\nClasses\nclass MediaAnalysisPlugin(PluginInterface):\n    \"\"\"\n    Abstract base class for plugins that analyze media files.\n    \n    Analysis plugins perform read-only operations that extract temporal segments\n    from media files (VAD, scene detection, beat detection, etc.).\n    \"\"\"\n    \n    def execute(\n            self,\n            media_path: Union[str, Path],  # Path to media file to analyze\n            **kwargs\n        ) -&gt; MediaAnalysisResult:  # Analysis result with detected TimeRanges\n        \"Analyze the media file and return detected temporal segments.\"\n\n\n\nCore Data Structures (core.ipynb)\n\nDTOs for media analysis and processing with FileBackedDTO support for zero-copy transfer\n\n\nImport\nfrom cjm_media_plugin_system.core import (\n    TimeRange,\n    MediaMetadata,\n    MediaAnalysisResult\n)\n\n\nClasses\n@dataclass\nclass TimeRange:\n    \"Represents a temporal segment within a media file.\"\n    \n    start: float  # Start time in seconds\n    end: float  # End time in seconds\n    label: str = 'segment'  # Segment type (e.g., 'speech', 'silence', 'scene')\n    confidence: Optional[float]  # Detection confidence (0.0 to 1.0)\n    payload: Dict[str, Any] = field(...)  # Extra data (e.g., speaker embedding)\n    \n    def to_dict(self) -&gt; Dict[str, Any]:  # Serialized representation\n        \"Convert to dictionary for JSON serialization.\"\n@dataclass\nclass MediaMetadata:\n    \"Container for media file metadata.\"\n    \n    path: str  # File path\n    duration: float  # Duration in seconds\n    format: str  # Container format (e.g., 'mp4', 'mkv')\n    size_bytes: int  # File size in bytes\n    video_streams: List[Dict[str, Any]] = field(...)  # Video stream info\n    audio_streams: List[Dict[str, Any]] = field(...)  # Audio stream info\n    \n    def to_dict(self) -&gt; Dict[str, Any]:  # Serialized representation\n        \"Convert to dictionary for JSON serialization.\"\n@dataclass\nclass MediaAnalysisResult:\n    \"Standard output for media analysis plugins.\"\n    \n    ranges: List[TimeRange]  # Detected temporal segments\n    metadata: Dict[str, Any] = field(...)  # Global analysis stats\n    \n    def to_temp_file(self) -&gt; str:  # Absolute path to temporary JSON file\n            \"\"\"Save results to a temp JSON file for zero-copy transfer.\"\"\"\n            tmp = tempfile.NamedTemporaryFile(suffix=\".json\", delete=False, mode='w')\n            \n            data = {\n                \"ranges\": [r.to_dict() for r in self.ranges],\n        \"Save results to a temp JSON file for zero-copy transfer.\"\n    \n    def from_file(\n            cls,\n            filepath: str  # Path to JSON file\n        ) -&gt; \"MediaAnalysisResult\":  # Loaded result instance\n        \"Load results from a JSON file.\"\n\n\n\nMedia Processing Plugin Interface (processing_interface.ipynb)\n\nDomain-specific plugin interface for media processing (write / file manipulation)\n\n\nImport\nfrom cjm_media_plugin_system.processing_interface import (\n    MediaProcessingPlugin\n)\n\n\nClasses\nclass MediaProcessingPlugin(PluginInterface):\n    \"\"\"\n    Abstract base class for plugins that modify, convert, or extract media.\n    \n    Processing plugins perform write operations that produce new files\n    (format conversion, segment extraction, re-encoding, etc.).\n    \"\"\"\n    \n    def execute(\n            self,\n            action: str = \"get_info\",  # Operation: 'get_info', 'convert', 'extract_segment'\n            **kwargs\n        ) -&gt; Dict[str, Any]:  # JSON-serializable result (usually containing 'output_path')\n        \"Execute a media processing operation.\"\n    \n    def get_info(\n            self,\n            file_path: Union[str, Path]  # Path to media file\n        ) -&gt; MediaMetadata:  # File metadata (duration, codec, streams)\n        \"Get metadata for a media file.\"\n    \n    def convert(\n            self,\n            input_path: Union[str, Path],  # Source file path\n            output_format: str,            # Target format (e.g., 'mp4', 'wav')\n            **kwargs\n        ) -&gt; str:  # Path to converted file\n        \"Convert media to a different format.\"\n    \n    def extract_segment(\n            self,\n            input_path: Union[str, Path],      # Source file path\n            start: float,                       # Start time in seconds\n            end: float,                         # End time in seconds\n            output_path: Optional[str] = None   # Custom output path (auto-generated if None)\n        ) -&gt; str:  # Path to extracted segment file\n        \"Extract a temporal segment from a media file.\"\n\n\n\nMedia Storage (storage.ipynb)\n\nStandardized SQLite storage for media analysis and processing results with content hashing\n\n\nImport\nfrom cjm_media_plugin_system.storage import (\n    MediaAnalysisRow,\n    MediaAnalysisStorage,\n    MediaProcessingRow,\n    MediaProcessingStorage\n)\n\n\nClasses\n@dataclass\nclass MediaAnalysisRow:\n    \"A single row from the analysis_jobs table.\"\n    \n    file_path: str  # Path to the analyzed media file\n    file_hash: str  # Hash of source file in \"algo:hexdigest\" format\n    config_hash: str  # Hash of the analysis config used\n    ranges: Optional[List[Dict[str, Any]]]  # Detected temporal segments\n    metadata: Optional[Dict[str, Any]]  # Analysis metadata\n    created_at: Optional[float]  # Unix timestamp\nclass MediaAnalysisStorage:\n    def __init__(\n        self,\n        db_path: str  # Absolute path to the SQLite database file\n    )\n    \"Standardized SQLite storage for media analysis results.\"\n    \n    def __init__(\n            self,\n            db_path: str  # Absolute path to the SQLite database file\n        )\n        \"Initialize storage and create table if needed.\"\n    \n    def save(\n            self,\n            file_path: str,     # Path to the analyzed media file\n            file_hash: str,     # Hash of source file in \"algo:hexdigest\" format\n            config_hash: str,   # Hash of the analysis config\n            ranges: Optional[List[Dict[str, Any]]] = None,  # Detected temporal segments\n            metadata: Optional[Dict[str, Any]] = None        # Analysis metadata\n        ) -&gt; None\n        \"Save or replace an analysis result (upsert by file_path + config_hash).\"\n    \n    def get_cached(\n            self,\n            file_path: str,   # Path to the media file\n            config_hash: str  # Config hash to match\n        ) -&gt; Optional[MediaAnalysisRow]:  # Cached row or None\n        \"Retrieve a cached analysis result by file path and config hash.\"\n    \n    def list_jobs(\n            self,\n            limit: int = 100  # Maximum number of rows to return\n        ) -&gt; List[MediaAnalysisRow]:  # List of analysis rows\n        \"List analysis jobs ordered by creation time (newest first).\"\n    \n    def verify_file(\n            self,\n            file_path: str,   # Path to the media file\n            config_hash: str  # Config hash to look up\n        ) -&gt; Optional[bool]:  # True if file matches, False if changed, None if not found\n        \"Verify the source media file still matches its stored hash.\"\n@dataclass\nclass MediaProcessingRow:\n    \"A single row from the processing_jobs table.\"\n    \n    job_id: str  # Unique job identifier\n    action: str  # Operation performed: 'convert', 'extract_segment', etc.\n    input_path: str  # Path to the source media file\n    input_hash: str  # Hash of source file in \"algo:hexdigest\" format\n    output_path: str  # Path to the produced output file\n    output_hash: str  # Hash of output file in \"algo:hexdigest\" format\n    parameters: Optional[Dict[str, Any]]  # Action-specific parameters\n    metadata: Optional[Dict[str, Any]]  # Processing metadata\n    created_at: Optional[float]  # Unix timestamp\nclass MediaProcessingStorage:\n    def __init__(\n        self,\n        db_path: str  # Absolute path to the SQLite database file\n    )\n    \"Standardized SQLite storage for media processing results.\"\n    \n    def __init__(\n            self,\n            db_path: str  # Absolute path to the SQLite database file\n        )\n        \"Initialize storage and create table if needed.\"\n    \n    def save(\n            self,\n            job_id: str,        # Unique job identifier\n            action: str,        # Operation performed: 'convert', 'extract_segment', etc.\n            input_path: str,    # Path to the source media file\n            input_hash: str,    # Hash of source file in \"algo:hexdigest\" format\n            output_path: str,   # Path to the produced output file\n            output_hash: str,   # Hash of output file in \"algo:hexdigest\" format\n            parameters: Optional[Dict[str, Any]] = None,  # Action-specific parameters\n            metadata: Optional[Dict[str, Any]] = None       # Processing metadata\n        ) -&gt; None\n        \"Save a media processing result to the database.\"\n    \n    def get_by_job_id(\n            self,\n            job_id: str  # Job identifier to look up\n        ) -&gt; Optional[MediaProcessingRow]:  # Row or None if not found\n        \"Retrieve a processing result by job ID.\"\n    \n    def list_jobs(\n            self,\n            limit: int = 100  # Maximum number of rows to return\n        ) -&gt; List[MediaProcessingRow]:  # List of processing rows\n        \"List processing jobs ordered by creation time (newest first).\"\n    \n    def verify_input(\n            self,\n            job_id: str  # Job identifier to verify\n        ) -&gt; Optional[bool]:  # True if input matches, False if changed, None if not found\n        \"Verify the source media file still matches its stored hash.\"\n    \n    def verify_output(\n            self,\n            job_id: str  # Job identifier to verify\n        ) -&gt; Optional[bool]:  # True if output matches, False if changed, None if not found\n        \"Verify the output media file still matches its stored hash.\"",
+    "crumbs": [
+      "cjm-media-plugin-system"
+    ]
+  },
+  {
+    "objectID": "processing_interface.html",
+    "href": "processing_interface.html",
+    "title": "Media Processing Plugin Interface",
+    "section": "",
+    "text": "source",
+    "crumbs": [
+      "Media Processing Plugin Interface"
+    ]
+  },
+  {
+    "objectID": "processing_interface.html#how-it-works",
+    "href": "processing_interface.html#how-it-works",
+    "title": "Media Processing Plugin Interface",
+    "section": "How It Works",
+    "text": "How It Works\nHost Process                              Worker Process (Isolated Env)\n┌─────────────────────┐                  ┌─────────────────────────────┐\n│                     │                  │                             │\n│ plugin.execute(     │   HTTP/JSON      │  MediaProcessingPlugin      │\n│   action=\"convert\", │ ─────────────────▶    .execute(                │\n│   input_path=\"...\", │                  │       action=\"convert\",     │\n│   output_format=    │                  │       ...                   │\n│     \"mp4\"           │                  │    )                        │\n│ )                   │                  │                             │\n│                     │                  │  # Calls internal method    │\n│ {                   │  ◀───────────────│  # .convert(...)            │\n│   \"output_path\":    │   (JSON)         │  # Returns new file path    │\n│   \"/tmp/out.mp4\"    │                  │                             │\n│ }                   │                  │                             │\n└─────────────────────┘                  └─────────────────────────────┘\nProcessing plugins: - Use action parameter to dispatch to specific methods - Return JSON-serializable results (typically containing output file paths) - May create new files (converted media, extracted segments)",
+    "crumbs": [
+      "Media Processing Plugin Interface"
+    ]
+  },
+  {
+    "objectID": "processing_interface.html#example-implementation",
+    "href": "processing_interface.html#example-implementation",
+    "title": "Media Processing Plugin Interface",
+    "section": "Example Implementation",
+    "text": "Example Implementation\nA minimal processing plugin that demonstrates the interface:\n\nfrom typing import List\n\nclass ExampleFFmpegPlugin(MediaProcessingPlugin):\n    \"\"\"Example FFmpeg-based media processing plugin implementation.\"\"\"\n    \n    def __init__(self):\n        self._config: Dict[str, Any] = {}\n\n    @property\n    def name(self) -&gt; str:\n        return \"example-ffmpeg\"\n    \n    @property\n    def version(self) -&gt; str:\n        return \"1.0.0\"\n\n    def initialize(self, config: Optional[Dict[str, Any]] = None) -&gt; None:\n        \"\"\"Initialize with configuration.\"\"\"\n        self._config = config or {\"ffmpeg_path\": \"ffmpeg\"}\n\n    def execute(\n        self,\n        action: str = \"get_info\",\n        **kwargs\n    ) -&gt; Dict[str, Any]:\n        \"\"\"Dispatch to appropriate method based on action.\"\"\"\n        if action == \"get_info\":\n            result = self.get_info(kwargs[\"file_path\"])\n            return result.to_dict()\n        elif action == \"convert\":\n            output = self.convert(\n                kwargs[\"input_path\"],\n                kwargs[\"output_format\"],\n                **{k: v for k, v in kwargs.items() if k not in [\"input_path\", \"output_format\"]}\n            )\n            return {\"output_path\": output}\n        elif action == \"extract_segment\":\n            output = self.extract_segment(\n                kwargs[\"input_path\"],\n                kwargs[\"start\"],\n                kwargs[\"end\"],\n                kwargs.get(\"output_path\")\n            )\n            return {\"output_path\": output}\n        else:\n            raise ValueError(f\"Unknown action: {action}\")\n\n    def get_info(self, file_path: Union[str, Path]) -&gt; MediaMetadata:\n        \"\"\"Get metadata for a media file (mock implementation).\"\"\"\n        return MediaMetadata(\n            path=str(file_path),\n            duration=120.5,\n            format=\"mp4\",\n            size_bytes=15_000_000,\n            video_streams=[{\"codec\": \"h264\", \"width\": 1920, \"height\": 1080}],\n            audio_streams=[{\"codec\": \"aac\", \"sample_rate\": 48000}]\n        )\n\n    def convert(\n        self,\n        input_path: Union[str, Path],\n        output_format: str,\n        **kwargs\n    ) -&gt; str:\n        \"\"\"Convert media format (mock implementation).\"\"\"\n        # In real implementation, would call ffmpeg here\n        input_stem = Path(input_path).stem\n        return f\"/tmp/{input_stem}.{output_format}\"\n\n    def extract_segment(\n        self,\n        input_path: Union[str, Path],\n        start: float,\n        end: float,\n        output_path: Optional[str] = None\n    ) -&gt; str:\n        \"\"\"Extract segment from media (mock implementation).\"\"\"\n        if output_path:\n            return output_path\n        # Auto-generate output path\n        input_p = Path(input_path)\n        return f\"/tmp/{input_p.stem}_segment_{start}_{end}{input_p.suffix}\"\n\n    def get_config_schema(self) -&gt; Dict[str, Any]:\n        \"\"\"Return JSON Schema for configuration.\"\"\"\n        return {\n            \"type\": \"object\",\n            \"properties\": {\n                \"ffmpeg_path\": {\n                    \"type\": \"string\",\n                    \"default\": \"ffmpeg\",\n                    \"description\": \"Path to ffmpeg binary\"\n                },\n                \"default_video_codec\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"h264\", \"h265\", \"vp9\"],\n                    \"default\": \"h264\"\n                }\n            }\n        }\n\n    def get_current_config(self) -&gt; Dict[str, Any]:\n        \"\"\"Return current configuration.\"\"\"\n        return self._config\n\n    def cleanup(self) -&gt; None:\n        \"\"\"Clean up resources.\"\"\"\n        pass\n\n\n# Test the example plugin\nplugin = ExampleFFmpegPlugin()\nplugin.initialize({\"ffmpeg_path\": \"/usr/bin/ffmpeg\"})\n\nprint(f\"Plugin: {plugin.name} v{plugin.version}\")\nprint(f\"Config schema: {plugin.get_config_schema()}\")\nprint(f\"Current config: {plugin.get_current_config()}\")\n\nPlugin: example-ffmpeg v1.0.0\nConfig schema: {'type': 'object', 'properties': {'ffmpeg_path': {'type': 'string', 'default': 'ffmpeg', 'description': 'Path to ffmpeg binary'}, 'default_video_codec': {'type': 'string', 'enum': ['h264', 'h265', 'vp9'], 'default': 'h264'}}}\nCurrent config: {'ffmpeg_path': '/usr/bin/ffmpeg'}\n\n\n\n# Test get_info action\ninfo_result = plugin.execute(action=\"get_info\", file_path=\"/path/to/video.mp4\")\nprint(f\"\\nget_info result:\")\nprint(f\"  Duration: {info_result['duration']}s\")\nprint(f\"  Format: {info_result['format']}\")\nprint(f\"  Video streams: {info_result['video_streams']}\")\n\n\nget_info result:\n  Duration: 120.5s\n  Format: mp4\n  Video streams: [{'codec': 'h264', 'width': 1920, 'height': 1080}]\n\n\n\n# Test convert action\nconvert_result = plugin.execute(\n    action=\"convert\",\n    input_path=\"/path/to/video.mp4\",\n    output_format=\"webm\"\n)\nprint(f\"\\nconvert result: {convert_result}\")\n\n\nconvert result: {'output_path': '/tmp/video.webm'}\n\n\n\n# Test extract_segment action\nsegment_result = plugin.execute(\n    action=\"extract_segment\",\n    input_path=\"/path/to/video.mp4\",\n    start=10.0,\n    end=25.5\n)\nprint(f\"\\nextract_segment result: {segment_result}\")\n\n# Cleanup\nplugin.cleanup()\n\n\nextract_segment result: {'output_path': '/tmp/video_segment_10.0_25.5.mp4'}",
+    "crumbs": [
+      "Media Processing Plugin Interface"
+    ]
+  }
+]
